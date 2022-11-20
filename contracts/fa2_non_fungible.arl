@@ -1,0 +1,46 @@
+archetype fa2_non_fungible(owner : address)
+
+asset ledger identified by ltoken_id to big_map {
+  ltoken_id : nat;
+  lowner    : address;
+  lmetadata : string;
+}
+
+record transfer_param {
+    tto       : address;
+    ttoken_id : nat;
+    tamount   : nat;
+}
+
+entry %transfer(from_: address, tsx: list<transfer_param>){
+    for tx in tsx do 
+        do_require(tx.tamount = 1, "NOT_ONE");
+        do_require(ledger[tx.ttoken_id].lowner = from_, "NOT_OWNER");
+        ledger.update(tx.ttoken_id, {lowner = tx.tto});
+    done
+}
+
+record balance_of_request {
+    browner    : address;
+    brtoken_id : nat;
+}
+
+record balance_of_response {
+    request : balance_of_request;
+    brbalance: nat;
+}
+
+getter balance_of(requests: list<balance_of_request>) : list<balance_of_response> {
+    return map(requests, br -> {
+        request = br;
+        brbalance = (ledger[br.brtoken_id] ? (the.lowner = br.browner ? 1 : 0) : 0)
+    })
+}
+
+entry mint(to_: address, token_id: nat, token_metadata: string) {
+    ledger.add({ ltoken_id = token_id; lowner = to_; lmetadata = token_metadata})
+}
+
+
+
+
