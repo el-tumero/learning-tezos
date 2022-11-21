@@ -6,6 +6,12 @@ asset ledger identified by ltoken_id to big_map {
   lmetadata : string;
 }
 
+asset operators identified by oowner ooperator otoken_id to big_map {
+    oowner    : address;
+    ooperator : address;
+    otoken_id : nat;
+}
+
 record transfer_param {
     tto       : address;
     ttoken_id : nat;
@@ -15,8 +21,35 @@ record transfer_param {
 entry %transfer(from_: address, tsx: list<transfer_param>){
     for tx in tsx do 
         do_require(tx.tamount = 1, "NOT_ONE");
+        do_require(caller = from_ or operators.contains((from_, caller, tx.ttoken_id)), "INVALID_CALLER");
         do_require(ledger[tx.ttoken_id].lowner = from_, "NOT_OWNER");
         ledger.update(tx.ttoken_id, {lowner = tx.tto});
+    done
+}
+
+
+enum update_operator_variant =
+| add_operator
+| remove_operator
+
+
+record update_operator_params {
+    uotype     : update_operator_variant;
+    uoowner    : address;
+    uooperator : address;
+    uotoken_id : nat
+}
+
+entry update_operator(updates: list<update_operator_params>){
+    for up in updates do
+        match up.uotype with 
+        | add_operator ->
+          do_require(up.uoowner = caller, "CALLER_NOT_OWNER");
+          operators.put({ up.uoowner; up.uooperator; up.uotoken_id })
+        | remove_operator -> 
+          do_require(up.uoowner = caller, "CALLER_NOT_OWNER");
+          operators.remove((up.uoowner, up.uooperator, up.uotoken_id))
+        end
     done
 }
 
@@ -38,7 +71,10 @@ getter balance_of(requests: list<balance_of_request>) : list<balance_of_response
 }
 
 entry mint(to_: address, token_id: nat, token_metadata: string) {
-    ledger.add({ ltoken_id = token_id; lowner = to_; lmetadata = token_metadata})
+    called by owner
+    effect {
+        ledger.add({ ltoken_id = token_id; lowner = to_; lmetadata = token_metadata});
+    }
 }
 
 
