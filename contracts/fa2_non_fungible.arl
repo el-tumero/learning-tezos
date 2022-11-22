@@ -1,9 +1,14 @@
-archetype fa2_non_fungible(owner : address)
+archetype fa2_non_fungible(owner : address) with metadata ""
+
+asset token_metadata to big_map {
+    mtoken_metadata: nat;
+    mtoken_id: nat;
+    mtoken_info: map<string, bytes>;
+}
 
 asset ledger identified by ltoken_id to big_map {
   ltoken_id : nat;
   lowner    : address;
-  lmetadata : string;
 }
 
 asset operators identified by oowner ooperator otoken_id to big_map {
@@ -18,11 +23,18 @@ record transfer_param {
     tamount   : nat;
 }
 
+entry set_metadata(k: string, d : option<bytes>) {
+  called by owner
+  effect {
+    metadata.update(k, d)
+  }
+}
+
 entry %transfer(from_: address, tsx: list<transfer_param>){
     for tx in tsx do 
         do_require(tx.tamount = 1, "NOT_ONE");
-        do_require(caller = from_ or operators.contains((from_, caller, tx.ttoken_id)), "INVALID_CALLER");
-        do_require(ledger[tx.ttoken_id].lowner = from_, "NOT_OWNER");
+        do_require(caller = from_ or operators.contains((from_, caller, tx.ttoken_id)), "FA2_NOT_OPERATOR");
+        do_require(ledger[tx.ttoken_id].lowner = from_, "FA2_NOT_OWNER");
         ledger.update(tx.ttoken_id, {lowner = tx.tto});
     done
 }
@@ -70,10 +82,21 @@ getter balance_of(requests: list<balance_of_request>) : list<balance_of_response
     })
 }
 
-entry mint(to_: address, token_id: nat, token_metadata: string) {
+entry set_token_metadata (tid: nat, tdata: map<string, bytes>) {
     called by owner
     effect {
-        ledger.add({ ltoken_id = token_id; lowner = to_; lmetadata = token_metadata});
+        token_metadata.add_update(tid, {mtoken_id = tid; mtoken_info = tdata})
+    }
+}
+
+entry mint(to_: address, token_id: nat, token_metadata_: map<string, bytes>) {
+    called by owner
+    effect {
+        ledger.add({ ltoken_id = token_id; lowner = to_});
+        token_metadata.add_update(token_id, {
+            mtoken_id = token_id;
+            mtoken_info = token_metadata_
+        })
     }
 }
 
